@@ -44,6 +44,13 @@ const DATA_FILENAME = "data.json"
 var carInventories []CarInventory
 
 func createCarInventory(filename string, data CarInventory) (CarInventory, error) {
+	carInventories, readDBError := readCarInventories(DATA_FILENAME)
+	if readDBError != nil {
+		return data, &DBError{
+			Operation: Create,
+			Err:       readDBError,
+		}
+	}
 	carInventories = append(carInventories, data)
 	byteData, jsonError := json.MarshalIndent(carInventories, " ", "")
 	if jsonError != nil {
@@ -127,7 +134,8 @@ func handleReadInventoryCars(w http.ResponseWriter, r *http.Request, _ httproute
 	w.Header().Set("Content-Type", "application/json")
 	carInventories, err := readCarInventories(DATA_FILENAME)
 	if err != nil {
-		w.WriteHeader(500)
+		fmt.Printf("%s\n", err.Error())
+		carInventories = []CarInventory{}
 	}
 	json.NewEncoder(w).Encode(carInventories)
 }
@@ -152,9 +160,20 @@ func handleDeleteInventoryCar(w http.ResponseWriter, r *http.Request, ps httprou
 
 func main() {
 	router := httprouter.New()
+
 	router.GET("/inventory/cars", handleReadInventoryCars)
 	router.POST("/inventory/cars", handleCreateInventoryCar)
 	router.DELETE("/inventory/cars/:vin", handleDeleteInventoryCar)
 
-	log.Fatal(http.ListenAndServe(":8888", router))
+	log.Fatal(http.ListenAndServe(":8888", &Server{router}))
+}
+
+type Server struct {
+	r *httprouter.Router
+}
+
+func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
+	s.r.ServeHTTP(w, r)
 }
