@@ -25,7 +25,7 @@ type DBError struct {
 }
 
 func (e *DBError) Error() string {
-	return fmt.Sprintf("[%s]errors:%w", e.Operation, e.Err)
+	return fmt.Sprintf("[DBError][%s]errors:%w", e.Operation, e.Err)
 }
 
 type CarInventory struct {
@@ -39,7 +39,25 @@ type CarInventory struct {
 	Listed string `json:"listed"`
 }
 
+type Data interface{}
+
+type ResponseError struct {
+	Code    int    `json:code`
+	Message string `json:message`
+}
+
+func (e *ResponseError) Error() string {
+	return fmt.Sprintf("[ResponseError](%d)[%s]", e.Code, e.Message)
+}
+
+type APIResponse struct {
+	Success bool          `json:"success"`
+	Data    Data          `json:"data"`
+	Err     ResponseError `json:"err"`
+}
+
 const DATA_FILENAME = "data.json"
+const SERVER_PORT = 8888
 
 var carInventories []CarInventory
 
@@ -51,6 +69,7 @@ func createCarInventory(filename string, data CarInventory) (CarInventory, error
 			Err:       readDBError,
 		}
 	}
+
 	carInventories = append(carInventories, data)
 	byteData, jsonError := json.MarshalIndent(carInventories, " ", "")
 	if jsonError != nil {
@@ -59,6 +78,7 @@ func createCarInventory(filename string, data CarInventory) (CarInventory, error
 			Err:       jsonError,
 		}
 	}
+
 	fileError := ioutil.WriteFile(filename, byteData, 0644)
 	if fileError != nil {
 		dbError := &DBError{
@@ -79,6 +99,7 @@ func readCarInventories(filename string) ([]CarInventory, error) {
 			Err:       fileError,
 		}
 	}
+
 	jsonError := json.Unmarshal(byteCarInventories, &carInventories)
 	if jsonError != nil {
 		return nil, &DBError{
@@ -86,6 +107,7 @@ func readCarInventories(filename string) ([]CarInventory, error) {
 			Err:       jsonError,
 		}
 	}
+
 	return carInventories, nil
 }
 
@@ -97,6 +119,7 @@ func deleteCarInventory(filename string, vin string) (string, error) {
 			Err:       readDBError,
 		}
 	}
+
 	for i, carInventory := range carInventories {
 		if carInventory.Vin == vin {
 			carInventories = append(carInventories[:i], carInventories[i+1:]...)
@@ -111,6 +134,7 @@ func deleteCarInventory(filename string, vin string) (string, error) {
 			Err:       jsonError,
 		}
 	}
+
 	fileError := ioutil.WriteFile(filename, byteData, 0644)
 	if fileError != nil {
 		return vin, &DBError{
@@ -127,17 +151,21 @@ func loadCarInventoryData() {
 	if err != nil {
 		log.Fatal("car inventories are not initialized")
 	}
+
 	json.Unmarshal(data, &carInventories)
 }
 
 func handleReadInventoryCars(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	w.Header().Set("Content-Type", "application/json")
 	carInventories, err := readCarInventories(DATA_FILENAME)
 	if err != nil {
 		fmt.Printf("%s\n", err.Error())
 		carInventories = []CarInventory{}
 	}
-	json.NewEncoder(w).Encode(carInventories)
+
+	json.NewEncoder(w).Encode(&APIResponse{
+		Success: true,
+		Data:    carInventories,
+	})
 }
 
 func handleCreateInventoryCar(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
@@ -146,16 +174,36 @@ func handleCreateInventoryCar(w http.ResponseWriter, r *http.Request, ps httprou
 	if c.Vin == "" {
 		log.Fatal("Vin Field Required!")
 	}
-	createCarInventory(DATA_FILENAME, c)
-	fmt.Printf("%+v", c)
+
+	_, dbError := createCarInventory(DATA_FILENAME, c)
+	if dbError != nil {
+		json.NewEncoder(w).Encode(&APIResponse{
+			Success: false,
+			Err: ResponseError{
+				Code:    20001,
+				Message: dbError.Error(),
+			},
+		})
+	}
+
+	json.NewEncoder(w).Encode(&APIResponse{
+		Success: true,
+		Data:    c,
+	})
 }
 
 func handleDeleteInventoryCar(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	vin := ps.ByName("vin")
 
-	deleteCarInventory(DATA_FILENAME, vin)
+	_, dbError := deleteCarInventory(DATA_FILENAME, vin)
+	if dbError != nil {
+		w.WriteHeader(500)
+	}
 
-	fmt.Fprintf(w, "vin:%s\n", vin)
+	json.NewEncoder(w).Encode(&APIResponse{
+		Success: true,
+		Data:    vin,
+	})
 }
 
 func main() {
@@ -165,7 +213,9 @@ func main() {
 	router.POST("/inventory/cars", handleCreateInventoryCar)
 	router.DELETE("/inventory/cars/:vin", handleDeleteInventoryCar)
 
-	log.Fatal(http.ListenAndServe(":8888", &Server{router}))
+	fmt.Printf("api server listening on %d\n", SERVER_PORT)
+
+	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", SERVER_PORT), &Server{router}))
 }
 
 type Server struct {
@@ -173,7 +223,9 @@ type Server struct {
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
+	header := w.Header()
+	header.Set("Content-Type", "application/json")
+	header.Set("Access-Control-Allow-Origin", "*")
+	header.Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
 	s.r.ServeHTTP(w, r)
 }
