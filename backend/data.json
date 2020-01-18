@@ -1,0 +1,12 @@
+[
+ {
+ "vin": "MWELKFJEWLFJDKFML",
+ "model": "b",
+ "make": "c",
+ "year": 2015,
+ "msrp": 100000,
+ "status": "Ordered",
+ "booked": "y",
+ "listed": "n"
+ }
+ ]
