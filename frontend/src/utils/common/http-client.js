@@ -1,6 +1,8 @@
 import axios from "axios";
 
-const BASE_URL = "http://localhost:8888";
+const isDevelopmentMode = () => process.env.NODE_ENV !== "production";
+
+const BASE_URL =  isDevelopmentMode() ? "http://localhost:8888" : "";
 const SECOND = 1000;
 
 const httpClient = axios.create({
