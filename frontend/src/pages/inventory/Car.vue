@@ -188,8 +188,10 @@ export default {
             return [...new Array(n)].map(() => ({ "text": String(startYear), "value": startYear++ }));
         };
         const notEmptyRule = v => !!v || "This field is required";
-        const notNegativeIntegerRule = v => (Number(v) >= 0 || "This field is non negative integer.");
+        const positiveIntegerRule = v => (Number(v) > 0 || "This field is positive integer.");
 
+        const EMPTY_STRING = "";
+        const MINIMUM_POSITIVE_INTENGER = 1;
         const DEFAULT_STATUS = "ordered";
         const DEFAULT_BOOKED = "y";
         const DEFAULT_LISTED = "y";
@@ -215,15 +217,14 @@ export default {
             disablePagination: true,
             enteredMake: "",
             enteredModel: "",
-            enteredMSRP: 0,
+            enteredMSRP: 1,
             enteredVin: "",
-            enteredYear: 0,
             fields: [
-                { "prop": "enteredVin",     "name": "vin",    "defaultValue": "" },
-                { "prop": "enteredModel",   "name": "model",  "defaultValue": "" },
-                { "prop": "enteredMake",    "name": "make",   "defaultValue": "" },
+                { "prop": "enteredVin",     "name": "vin",    "defaultValue": EMPTY_STRING },
+                { "prop": "enteredModel",   "name": "model",  "defaultValue": EMPTY_STRING },
+                { "prop": "enteredMake",    "name": "make",   "defaultValue": EMPTY_STRING },
                 { "prop": "selectedYear",   "name": "year",   "defaultValue": END_YEAR },
-                { "prop": "enteredMSRP",    "name": "msrp",   "defaultValue": 0 },
+                { "prop": "enteredMSRP",    "name": "msrp",   "defaultValue": MINIMUM_POSITIVE_INTENGER },
                 { "prop": "selectedStatus", "name": "status", "defaultValue": DEFAULT_STATUS },
                 { "prop": "selectedBooked", "name": "booked", "defaultValue": DEFAULT_BOOKED },
                 { "prop": "selectedListed", "name": "listed", "defaultValue": DEFAULT_LISTED },
@@ -236,7 +237,7 @@ export default {
             isFormValidInDialog: false,
             logger: console,
             multiLineToastMessage: false,
-            notNegativeIntegerRules: [notNegativeIntegerRule],
+            notNegativeIntegerRules: [positiveIntegerRule],
             pageTitle: "Inventory List",
             selectedBooked: DEFAULT_BOOKED,
             selectedFilterOptions: [],
