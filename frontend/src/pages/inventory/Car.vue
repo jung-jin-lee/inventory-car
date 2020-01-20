@@ -1,5 +1,5 @@
 <template>
-    <v-container>
+    <v-col cols="12">
         <v-row>
             <v-col cols="12">
                 <v-card height="4em" outlined>
@@ -35,6 +35,7 @@
                 no-data-text="Inventory cars are empty"
                 show-select
                 :single-select="singleSelect"
+                style="width: 1920px; padding: 0.75em"
                 v-model="selectedRows"
             >
                 <template v-slot:item.msrp="{ item }">
@@ -114,26 +115,26 @@
                                     </v-col>
                                     <v-col cols="12">
                                         <v-select
-                                        :items="['ordered', 'in stock', 'sold']"
-                                        label="Status"
-                                        required
-                                        v-model="selectedStatus"
+                                            :items="['ordered', 'in stock', 'sold']"
+                                            label="Status"
+                                            required
+                                            v-model="selectedStatus"
                                         ></v-select>
                                     </v-col>
                                     <v-col cols="6" sm="6">
                                         <v-select
-                                        :items="['y', 'n']"
-                                        label="Booked"
-                                        required
-                                        v-model="selectedBooked"
+                                            :items="['y', 'n']"
+                                            label="Booked"
+                                            required
+                                            v-model="selectedBooked"
                                         ></v-select>
                                     </v-col>
                                     <v-col cols="12" sm="6">
                                         <v-select
-                                        :items="['y', 'n']"
-                                        label="Listed"
-                                        required
-                                        v-model="selectedListed"
+                                            :items="['y', 'n']"
+                                            label="Listed"
+                                            required
+                                            v-model="selectedListed"
                                         ></v-select>
                                     </v-col>
                                 </v-row>
@@ -164,7 +165,7 @@
                 X
             </v-btn>
         </v-snackbar>
-    </v-container>
+    </v-col>
 </template>
 
 <script>
@@ -203,15 +204,15 @@ export default {
             basicRequiredRules: [notEmptyRule],
             carInventories: [],
             carInventoryTableHeaders: [
-                { "align": "left",   "text": "No",     "value": "no",     "width": 80  },
-                { "align": "left",   "text": "Vin#",   "value": "vin",    "width": 200 },
+                { "align": "left",   "text": "No",     "value": "no",     "width": 120  },
+                { "align": "left",   "text": "Vin#",   "value": "vin",    "width": 340 },
                 { "align": "left",   "text": "Model",  "value": "model",  "width": 140 },
-                { "align": "left",   "text": "Make",   "value": "make",   "width": 100 },
+                { "align": "left",   "text": "Make",   "value": "make",   "width": 140 },
                 { "align": "center", "text": "Year",   "value": "year",   "width": 80  },
-                { "align": "right",  "text": "MSRP",   "value": "msrp",   "width": 100 },
-                { "align": "left",   "text": "Status", "value": "status", "width": 140 },
-                { "align": "center", "text": "Booked", "value": "booked", "width": 100 },
-                { "align": "center", "text": "Listed", "value": "listed", "width": 100 },
+                { "align": "right",  "text": "MSRP",   "value": "msrp",   "width": 240 },
+                { "align": "left",   "text": "Status", "value": "status", "width": 240 },
+                { "align": "center", "text": "Booked", "value": "booked", "width": 120 },
+                { "align": "center", "text": "Listed", "value": "listed", "width": 120 },
             ],
             visibleDialog: false,
             disablePagination: true,
