@@ -308,6 +308,7 @@ export default {
                     await deleteInventoryCar(vin);
                     this.carInventories = await getInventoryCars().then(handleApiResponse);
                     this.openToastMessage("Deleted Checked Row");
+                    this.selectedRows = [];
                 } catch (error) {
                     this.openToastMessageAboutServerError();
                     this.logger.error("[API][deleteInventoryCar or getInventoryCars]", error);
