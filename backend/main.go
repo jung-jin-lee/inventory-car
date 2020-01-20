@@ -6,6 +6,9 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
+
+	"github.com/go-playground/validator"
 
 	"github.com/julienschmidt/httprouter"
 )
@@ -29,14 +32,14 @@ func (e *DBError) Error() string {
 }
 
 type CarInventory struct {
-	Vin    string `json:"vin"`
-	Model  string `json:"model"`
-	Make   string `json:"make"`
-	Year   int    `json:"year"`
-	MSRP   int    `json:"msrp"`
-	Status string `json:"status"`
-	Booked string `json:"booked"`
-	Listed string `json:"listed"`
+	Vin    string `json:"vin" validate:"required"`
+	Model  string `json:"model" validate:"required"`
+	Make   string `json:"make" validate:"required"`
+	Year   int    `json:"year" validate:"required"`
+	MSRP   int    `json:"msrp" validate:"required"`
+	Status string `json:"status" validate:"required"`
+	Booked string `json:"booked" validate:"required"`
+	Listed string `json:"listed" validate:"required"`
 }
 
 type Data interface{}
@@ -59,10 +62,33 @@ type APIResponse struct {
 const DATA_FILENAME = "data.json"
 const SERVER_PORT = 8888
 
-var carInventories []CarInventory
+var (
+	readFromCarInventoryDB = readFromFile(DATA_FILENAME)
+	commitToCarInventoryDB = commitToFile(DATA_FILENAME, 0644)
+)
 
-func createCarInventory(filename string, data CarInventory) (CarInventory, error) {
-	carInventories, readDBError := readCarInventories(DATA_FILENAME)
+func readFromFile(filename string) func() ([]byte, error) {
+	return func() ([]byte, error) {
+		return ioutil.ReadFile(filename)
+	}
+}
+
+func commitToFile(filename string, perm os.FileMode) func([]byte) error {
+	return func(data []byte) error {
+		return ioutil.WriteFile(filename, data, perm)
+	}
+}
+
+func encodeJSON(data interface{}) ([]byte, error) {
+	return json.MarshalIndent(data, " ", "")
+}
+
+func decodeJSON(data []byte, v interface{}) error {
+	return json.Unmarshal(data, v)
+}
+
+func createCarInventory(data CarInventory) (CarInventory, error) {
+	carInventories, readDBError := readCarInventories()
 	if readDBError != nil {
 		return data, &DBError{
 			Operation: Create,
@@ -71,7 +97,7 @@ func createCarInventory(filename string, data CarInventory) (CarInventory, error
 	}
 
 	carInventories = append(carInventories, data)
-	byteData, jsonError := json.MarshalIndent(carInventories, " ", "")
+	byteData, jsonError := encodeJSON(carInventories)
 	if jsonError != nil {
 		return data, &DBError{
 			Operation: Create,
@@ -79,44 +105,41 @@ func createCarInventory(filename string, data CarInventory) (CarInventory, error
 		}
 	}
 
-	fileError := ioutil.WriteFile(filename, byteData, 0644)
-	if fileError != nil {
-		dbError := &DBError{
+	commitError := commitToCarInventoryDB(byteData)
+	if commitError != nil {
+		return data, &DBError{
 			Operation: Create,
-			Err:       fileError,
+			Err:       commitError,
 		}
-		return data, dbError
 	}
 
 	return data, nil
 }
 
-func readCarInventories(filename string) ([]CarInventory, error) {
-	byteCarInventories, fileError := ioutil.ReadFile(filename)
-	if fileError != nil {
+func readCarInventories() ([]CarInventory, error) {
+	var carInventories []CarInventory
+	data, readDBError := readFromCarInventoryDB()
+	if readDBError != nil {
 		return nil, &DBError{
 			Operation: Read,
-			Err:       fileError,
+			Err:       readDBError,
 		}
 	}
 
-	jsonError := json.Unmarshal(byteCarInventories, &carInventories)
+	jsonError := decodeJSON(data, &carInventories)
 	if jsonError != nil {
-		return nil, &DBError{
-			Operation: Read,
-			Err:       jsonError,
-		}
+		return nil, jsonError
 	}
 
 	return carInventories, nil
 }
 
-func deleteCarInventory(filename string, vin string) (string, error) {
-	carInventories, readDBError := readCarInventories(DATA_FILENAME)
-	if readDBError != nil {
+func deleteCarInventory(vin string) (string, error) {
+	carInventories, readError := readCarInventories()
+	if readError != nil {
 		return vin, &DBError{
 			Operation: Delete,
-			Err:       readDBError,
+			Err:       readError,
 		}
 	}
 
@@ -127,7 +150,7 @@ func deleteCarInventory(filename string, vin string) (string, error) {
 		}
 	}
 
-	byteData, jsonError := json.MarshalIndent(carInventories, " ", "")
+	byteData, jsonError := encodeJSON(carInventories)
 	if jsonError != nil {
 		return vin, &DBError{
 			Operation: Delete,
@@ -135,7 +158,7 @@ func deleteCarInventory(filename string, vin string) (string, error) {
 		}
 	}
 
-	fileError := ioutil.WriteFile(filename, byteData, 0644)
+	fileError := commitToCarInventoryDB(byteData)
 	if fileError != nil {
 		return vin, &DBError{
 			Operation: Delete,
@@ -146,23 +169,55 @@ func deleteCarInventory(filename string, vin string) (string, error) {
 	return vin, nil
 }
 
-func loadCarInventoryData() {
-	data, err := ioutil.ReadFile("data.json")
-	if err != nil {
-		log.Fatal("car inventories are not initialized")
-	}
+func parseHTTPBody(r *http.Request, d interface{}) {
+	json.NewDecoder(r.Body).Decode(&d)
+}
 
-	json.Unmarshal(data, &carInventories)
+func validateCarInventorySchema(c CarInventory) bool {
+	v := validator.New()
+	err := v.Struct(c)
+	if err != nil {
+		return false
+	}
+	return true
+}
+
+func responseJSON(w http.ResponseWriter, r *http.Request, apiResponse APIResponse) {
+	json.NewEncoder(w).Encode(apiResponse)
+}
+
+func responseInvalidParameter(w http.ResponseWriter, r *http.Request) {
+	apiResponse := APIResponse{
+		Success: false,
+		Err: ResponseError{
+			Code:    30001,
+			Message: "Some parameters are invalid.",
+		},
+	}
+	w.WriteHeader(http.StatusBadRequest)
+	responseJSON(w, r, apiResponse)
+}
+
+func responseDBError(w http.ResponseWriter, r *http.Request) {
+	apiResponse := APIResponse{
+		Success: false,
+		Err: ResponseError{
+			Code:    20001,
+			Message: "Internal Server Error",
+		},
+	}
+	w.WriteHeader(http.StatusInternalServerError)
+	responseJSON(w, r, apiResponse)
 }
 
 func handleReadInventoryCars(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	carInventories, err := readCarInventories(DATA_FILENAME)
+	carInventories, err := readCarInventories()
 	if err != nil {
 		fmt.Printf("%s\n", err.Error())
 		carInventories = []CarInventory{}
 	}
 
-	json.NewEncoder(w).Encode(&APIResponse{
+	responseJSON(w, r, APIResponse{
 		Success: true,
 		Data:    carInventories,
 	})
@@ -170,40 +225,35 @@ func handleReadInventoryCars(w http.ResponseWriter, r *http.Request, _ httproute
 
 func handleCreateInventoryCar(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	var c CarInventory
-	json.NewDecoder(r.Body).Decode(&c)
-	if c.Vin == "" {
-		log.Fatal("Vin Field Required!")
-	}
+	parseHTTPBody(r, &c)
 
-	_, dbError := createCarInventory(DATA_FILENAME, c)
-	if dbError != nil {
-		json.NewEncoder(w).Encode(&APIResponse{
-			Success: false,
-			Err: ResponseError{
-				Code:    20001,
-				Message: dbError.Error(),
-			},
-		})
+	if validateCarInventorySchema(c) {
+		_, dbError := createCarInventory(c)
+		if dbError != nil {
+			responseDBError(w, r)
+		} else {
+			responseJSON(w, r, APIResponse{
+				Success: true,
+				Data:    c,
+			})
+		}
+	} else {
+		responseInvalidParameter(w, r)
 	}
-
-	json.NewEncoder(w).Encode(&APIResponse{
-		Success: true,
-		Data:    c,
-	})
 }
 
 func handleDeleteInventoryCar(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	vin := ps.ByName("vin")
 
-	_, dbError := deleteCarInventory(DATA_FILENAME, vin)
+	_, dbError := deleteCarInventory(vin)
 	if dbError != nil {
-		w.WriteHeader(500)
+		responseDBError(w, r)
+	} else {
+		responseJSON(w, r, APIResponse{
+			Success: true,
+			Data:    vin,
+		})
 	}
-
-	json.NewEncoder(w).Encode(&APIResponse{
-		Success: true,
-		Data:    vin,
-	})
 }
 
 func main() {
