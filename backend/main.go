@@ -65,6 +65,13 @@ const SERVER_PORT = 8888
 var (
 	readFromCarInventoryDB = readFromFile(DATA_FILENAME)
 	commitToCarInventoryDB = commitToFile(DATA_FILENAME, 0644)
+	createCarInventoryDB   = func() error {
+		initCarInventory, jsonError := encodeJSON([]CarInventory{})
+		if jsonError != nil {
+			return jsonError
+		}
+		return commitToCarInventoryDB(initCarInventory)
+	}
 )
 
 func readFromFile(filename string) func() ([]byte, error) {
@@ -118,12 +125,16 @@ func createCarInventory(data CarInventory) (CarInventory, error) {
 
 func readCarInventories() ([]CarInventory, error) {
 	var carInventories []CarInventory
-	data, readDBError := readFromCarInventoryDB()
-	if readDBError != nil {
-		return nil, &DBError{
-			Operation: Read,
-			Err:       readDBError,
+	data, notExistCarInventoryDB := readFromCarInventoryDB()
+	if notExistCarInventoryDB != nil {
+		createDBError := createCarInventoryDB()
+		if createDBError != nil {
+			return nil, &DBError{
+				Operation: Read,
+				Err:       createDBError,
+			}
 		}
+		data, _ = readFromCarInventoryDB()
 	}
 
 	jsonError := decodeJSON(data, &carInventories)
